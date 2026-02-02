@@ -79,6 +79,22 @@ launchctl list | grep contextvault
 
 **$0/month** — Pure Node.js + SQLite. No API calls, no cloud services.
 
+## ☕ Support This Project
+
+If you find ContextVault useful, consider buying me a coffee! Your support helps keep this project free and actively maintained.
+
+<a href="https://buymeacoffee.com/PekkaPrime" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200">
+</a>
+
+Every contribution helps fund:
+- 🔬 New features and improvements
+- 🐛 Bug fixes and maintenance
+- 📚 Better documentation
+- 🛠️ More OpenClaw integrations
+
+---
+
 ## License
 
 MIT
