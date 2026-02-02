@@ -222,38 +222,13 @@ launchctl load ~/Library/LaunchAgents/com.openclaw.contextvault.plist
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         OpenClaw                                 │
-│                    ~/.openclaw/agents/*/sessions/                │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ (file changes)
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     SessionWatcher                               │
-│              (detects new messages, compactions)                 │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      ContextVault                                │
-│                    (SQLite Database)                             │
-│                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │  messages   │  │  snapshots  │  │ compactions │              │
-│  │ (append-only)│  │  (named)    │  │  (events)   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         CLI / API                                │
-│                                                                  │
-│  context-vault snapshot "before-migration"                       │
-│  context-vault recover --last 50                                 │
-│  context-vault search "what did we decide about X"               │
-└─────────────────────────────────────────────────────────────────┘
-```
+![ContextVault Architecture](docs/architecture.png)
+
+**Flow:**
+1. OpenClaw stores conversations in session files
+2. SessionWatcher syncs new messages every 10 seconds
+3. All messages stored in SQLite with full-text search
+4. When context compacts → recover from vault instantly
 
 ## Data Storage
 

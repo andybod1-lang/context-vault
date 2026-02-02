@@ -1,0 +1,33 @@
+flowchart TB
+    subgraph OpenClaw["🦞 OpenClaw"]
+        Sessions["Session Files<br/>~/.openclaw/agents/*/sessions/"]
+        Context["Context Window<br/>200k tokens max"]
+    end
+    
+    subgraph ContextVault["🛡️ ContextVault"]
+        Watcher["Session Watcher<br/>Syncs every 10s"]
+        SQLite["SQLite Database<br/>~/.openclaw/context-vault/vault.db"]
+        FTS["Full-Text Search<br/>FTS5 Index"]
+    end
+    
+    subgraph Recovery["🔄 Recovery"]
+        Recover["context-vault recover"]
+        Search["context-vault search"]
+        History["context-vault history"]
+    end
+    
+    Sessions -->|"New messages"| Watcher
+    Watcher -->|"Store"| SQLite
+    SQLite --> FTS
+    
+    Context -->|"⚠️ Compaction"| Lost["Context Lost!"]
+    Lost -->|"Recover"| Recover
+    SQLite -->|"Full history"| Recover
+    SQLite -->|"Find anything"| Search
+    SQLite -->|"Recent msgs"| History
+    
+    Recover -->|"Restore"| Context
+    
+    style ContextVault fill:#e8f5e9
+    style Lost fill:#ffebee
+    style Recover fill:#e3f2fd
