@@ -1,0 +1,36 @@
+{
+  "name": "context-vault",
+  "version": "1.0.0",
+  "description": "Local context memory system that survives compaction",
+  "main": "src/index.js",
+  "bin": {
+    "context-vault": "./bin/context-vault"
+  },
+  "scripts": {
+    "sync": "node bin/context-vault sync",
+    "watch": "node bin/context-vault watch",
+    "stats": "node bin/context-vault stats",
+    "test": "node test/test.js"
+  },
+  "keywords": [
+    "openclaw",
+    "context",
+    "memory",
+    "sqlite",
+    "compaction",
+    "recovery"
+  ],
+  "author": "Pekka",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "commander": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andybod/context-vault"
+  }
+}

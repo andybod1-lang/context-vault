@@ -1,0 +1,219 @@
+#!/usr/bin/env node
+
+const { program } = require('commander');
+const path = require('path');
+const ContextVault = require('../src/vault');
+const SessionWatcher = require('../src/watcher');
+
+const DEFAULT_SESSION = 'agent:main:main';
+const vault = new ContextVault();
+
+program
+  .name('context-vault')
+  .description('Local context memory system - survives compaction')
+  .version('1.0.0');
+
+program
+  .command('snapshot <name>')
+  .description('Create a named snapshot')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .option('-t, --trigger <type>', 'Trigger type', 'manual')
+  .action((name, opts) => {
+    vault.createSnapshot(opts.session, name, opts.trigger);
+    console.log(`✅ Snapshot "${name}" created for ${opts.session}`);
+  });
+
+program
+  .command('snapshots')
+  .description('List all snapshots')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .action((opts) => {
+    const snaps = vault.getSnapshots(opts.session);
+    if (snaps.length === 0) {
+      console.log('No snapshots found.');
+      return;
+    }
+    console.log('📸 Snapshots:\n');
+    for (const s of snaps) {
+      const date = new Date(s.created_at).toISOString().slice(0, 19).replace('T', ' ');
+      console.log(`  ${s.name} (${date}) - ${s.message_count} msgs [${s.trigger}]`);
+    }
+  });
+
+program
+  .command('recover')
+  .description('Generate recovery file after compaction')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .option('-l, --last <n>', 'Number of messages', '50')
+  .option('-o, --output <path>', 'Output file path')
+  .action((opts) => {
+    const outputPath = opts.output || `/tmp/context-recovery-${Date.now()}.md`;
+    vault.generateRecoveryFile(opts.session, {
+      messageCount: parseInt(opts.last),
+      outputPath
+    });
+    console.log(`✅ Recovery file: ${outputPath}`);
+  });
+
+program
+  .command('search <query>')
+  .description('Search all message history')
+  .option('-s, --session <id>', 'Limit to session')
+  .option('-l, --limit <n>', 'Max results', '20')
+  .action((query, opts) => {
+    const results = vault.search(query, {
+      sessionId: opts.session,
+      limit: parseInt(opts.limit)
+    });
+    
+    if (results.length === 0) {
+      console.log('No results found.');
+      return;
+    }
+    
+    console.log(`🔍 Found ${results.length} results:\n`);
+    for (const r of results) {
+      const date = new Date(r.timestamp).toISOString().slice(0, 19).replace('T', ' ');
+      const preview = (r.highlighted || r.content || '').slice(0, 100).replace(/\n/g, ' ');
+      console.log(`[${date}] ${r.role}: ${preview}...`);
+    }
+  });
+
+program
+  .command('history')
+  .description('View session history')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .option('-l, --last <n>', 'Number of messages', '20')
+  .action((opts) => {
+    const messages = vault.getMessages(opts.session, { limit: parseInt(opts.last) });
+    
+    if (messages.length === 0) {
+      console.log('No messages found.');
+      return;
+    }
+    
+    console.log(`📜 Last ${messages.length} messages:\n`);
+    for (const m of messages.reverse()) {
+      const date = new Date(m.timestamp).toISOString().slice(11, 19);
+      const preview = (m.content || '').slice(0, 150).replace(/\n/g, ' ');
+      console.log(`[${date}] ${m.role.toUpperCase()}: ${preview}...`);
+      console.log('');
+    }
+  });
+
+program
+  .command('stats')
+  .description('Show vault statistics')
+  .action(() => {
+    const stats = vault.getStats();
+    console.log('📊 ContextVault Stats\n');
+    console.log(`   Sessions:    ${stats.sessions.toLocaleString()}`);
+    console.log(`   Messages:    ${stats.messages.toLocaleString()}`);
+    console.log(`   Snapshots:   ${stats.snapshots}`);
+    console.log(`   Compactions: ${stats.compactions}`);
+  });
+
+program
+  .command('add')
+  .description('Manually add a message (for testing)')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .requiredOption('-r, --role <role>', 'Message role (user/assistant/system)')
+  .requiredOption('-c, --content <text>', 'Message content')
+  .action((opts) => {
+    vault.appendMessage(opts.session, {
+      role: opts.role,
+      content: opts.content
+    });
+    console.log('✅ Message added');
+  });
+
+program
+  .command('compaction')
+  .description('Record a compaction event')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .requiredOption('--before <n>', 'Messages before compaction')
+  .requiredOption('--after <n>', 'Messages after compaction')
+  .option('--no-summary', 'Summary was not available')
+  .action((opts) => {
+    vault.recordCompaction(opts.session, {
+      messagesBefore: parseInt(opts.before),
+      messagesAfter: parseInt(opts.after),
+      summaryAvailable: opts.summary !== false
+    });
+    console.log('✅ Compaction recorded');
+  });
+
+program
+  .command('sync')
+  .description('Sync all OpenClaw sessions to vault')
+  .action(() => {
+    const watcher = new SessionWatcher(vault);
+    console.log('🔄 Syncing sessions...\n');
+    const result = watcher.syncAll();
+    console.log(`\n✅ Done: ${result.totalSynced} messages from ${result.filesScanned} session files`);
+  });
+
+program
+  .command('watch')
+  .description('Watch sessions and sync continuously')
+  .option('-i, --interval <ms>', 'Sync interval in ms', '5000')
+  .action((opts) => {
+    const watcher = new SessionWatcher(vault);
+    watcher.watch(parseInt(opts.interval));
+  });
+
+program
+  .command('sessions')
+  .description('List all tracked sessions')
+  .action(() => {
+    const sessions = vault.db.prepare('SELECT * FROM sessions ORDER BY last_activity DESC').all();
+    
+    if (sessions.length === 0) {
+      console.log('No sessions found. Run `sync` first.');
+      return;
+    }
+    
+    console.log('📋 Sessions:\n');
+    for (const s of sessions) {
+      const lastActivity = s.last_activity 
+        ? new Date(s.last_activity).toISOString().slice(0, 19).replace('T', ' ')
+        : 'never';
+      console.log(`  ${s.id}`);
+      console.log(`    Messages: ${s.total_messages} | Last activity: ${lastActivity}`);
+      console.log('');
+    }
+  });
+
+program
+  .command('export')
+  .description('Export session to markdown')
+  .option('-s, --session <id>', 'Session ID', DEFAULT_SESSION)
+  .option('-o, --output <path>', 'Output file path')
+  .action((opts) => {
+    const messages = vault.getMessages(opts.session, { limit: 10000 });
+    
+    if (messages.length === 0) {
+      console.log('No messages found.');
+      return;
+    }
+    
+    let content = `# Session Export: ${opts.session}\n\n`;
+    content += `**Exported:** ${new Date().toISOString()}\n`;
+    content += `**Messages:** ${messages.length}\n\n`;
+    content += `---\n\n`;
+    
+    for (const m of messages.reverse()) {
+      const time = new Date(m.timestamp).toISOString().slice(0, 19).replace('T', ' ');
+      content += `## [${time}] ${m.role.toUpperCase()}\n\n`;
+      content += `${m.content || '(no content)'}\n\n`;
+    }
+    
+    if (opts.output) {
+      require('fs').writeFileSync(opts.output, content);
+      console.log(`✅ Exported to: ${opts.output}`);
+    } else {
+      console.log(content);
+    }
+  });
+
+program.parse();
